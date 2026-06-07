@@ -5,7 +5,7 @@ from pymongo import MongoClient
 
 load_dotenv()
 
-client = MongoClient(os.getenv("MONGO_URI"))
+client = MongoClient(os.getenv("MONGO_URI"), tls=True, tlsAllowInvalidCertificates=True)
 db = client["weather_dashboard"]
 weather_collection = db["daily_weather"]
 
