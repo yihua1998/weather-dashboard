@@ -1,16 +1,30 @@
 import os
 from datetime import datetime
 from dotenv import load_dotenv
-from pymongo import MongoClient
 
 load_dotenv()
 
-client = MongoClient(os.getenv("MONGO_URI"), tls=True, tlsAllowInvalidCertificates=True)
-db = client["weather_dashboard"]
-weather_collection = db["daily_weather"]
+try:
+    from pymongo import MongoClient
+    client = MongoClient(
+        os.getenv("MONGO_URI"),
+        tls=True,
+        tlsAllowInvalidCertificates=True,
+        serverSelectionTimeoutMS=3000,
+        connectTimeoutMS=3000,
+    )
+    client.admin.command('ping')
+    db = client["weather_dashboard"]
+    weather_collection = db["daily_weather"]
+    DB_CONNECTED = True
+except Exception as e:
+    print(f"MongoDB 連線失敗：{e}")
+    DB_CONNECTED = False
+    weather_collection = None
 
 def save_daily_weather(city: str, forecast: list):
-    """儲存當天天氣快照"""
+    if not DB_CONNECTED or weather_collection is None:
+        return
     today = forecast[0]
     doc = {
         "city": city,
@@ -23,20 +37,25 @@ def save_daily_weather(city: str, forecast: list):
         "rain": today["rain"],
         "saved_at": datetime.now(),
     }
-    # 同一城市同一天只存一筆
-    weather_collection.update_one(
-        {"city": city, "date": doc["date"]},
-        {"$set": doc},
-        upsert=True
-    )
-    print(f"已儲存 {city} {doc['date']} 天氣資料")
+    try:
+        weather_collection.update_one(
+            {"city": city, "date": doc["date"]},
+            {"$set": doc},
+            upsert=True
+        )
+    except:
+        pass
 
 def get_history(city: str, days: int = 30):
-    """取得某城市過去N天的歷史資料"""
-    results = list(
-        weather_collection.find(
-            {"city": city},
-            {"_id": 0}
-        ).sort("date", -1).limit(days)
-    )
-    return list(reversed(results))
+    if not DB_CONNECTED or weather_collection is None:
+        return []
+    try:
+        results = list(
+            weather_collection.find(
+                {"city": city},
+                {"_id": 0}
+            ).sort("date", -1).limit(days)
+        )
+        return list(reversed(results))
+    except:
+        return []
